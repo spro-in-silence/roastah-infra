@@ -1,0 +1,95 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  annotations:
+    run.googleapis.com/client-name: gcloud
+    run.googleapis.com/client-version: 524.0.0
+    run.googleapis.com/ingress: all
+    run.googleapis.com/ingress-status: all
+    run.googleapis.com/operation-id: 85e2638b-567a-499a-ac4f-6869896fdb31
+    run.googleapis.com/urls: '["https://rate-grid-256468121098.us-central1.run.app","https://rate-grid-oov3gnxyda-uc.a.run.app"]'
+    serving.knative.dev/creator: awinash@gmail.com
+    serving.knative.dev/lastModifier: 256468121098-compute@developer.gserviceaccount.com
+  creationTimestamp: '2025-03-02T13:40:32.892315Z'
+  generation: 15
+  labels:
+    cloud.googleapis.com/location: us-central1
+    commit-sha: 1cc64ac0002b2e49e48d49a2b50bf7a42ed1dc7a
+    gcb-build-id: 88208438-5a63-40b1-afef-4b5cfacf59a8
+    gcb-trigger-id: 86027aa7-4cd5-44e7-9701-f48deb7bf81b
+    gcb-trigger-region: global
+    managed-by: gcp-cloud-build-deploy-cloud-run
+  name: rate-grid
+  namespace: '256468121098'
+  resourceVersion: AAY2lxYXOZk
+  selfLink: /apis/serving.knative.dev/v1/namespaces/256468121098/services/rate-grid
+  uid: dbac48a0-f75a-41b2-b809-118f5c3cc1d2
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: '100'
+        run.googleapis.com/client-name: gcloud
+        run.googleapis.com/client-version: 524.0.0
+        run.googleapis.com/startup-cpu-boost: 'true'
+      labels:
+        client.knative.dev/nonce: egszlhiebo
+        commit-sha: 1cc64ac0002b2e49e48d49a2b50bf7a42ed1dc7a
+        gcb-build-id: 88208438-5a63-40b1-afef-4b5cfacf59a8
+        gcb-trigger-id: 86027aa7-4cd5-44e7-9701-f48deb7bf81b
+        gcb-trigger-region: global
+        managed-by: gcp-cloud-build-deploy-cloud-run
+        run.googleapis.com/startupProbeType: Default
+    spec:
+      containerConcurrency: 80
+      containers:
+      - env:
+        - name: NODE_ENV
+          value: production
+        - name: APP_ENV
+          value: production
+        - name: GCP_PROJECT_ID
+          value: rate-grid
+        - name: GCP_SERVICE_ACCOUNT_KEY
+          value: projects/rate-grid/secrets/GCP_SERVICE_ACCOUNT_KEY/versions/latest
+        image: gcr.io/rate-grid/rate-grid:f94bda5cda543914f179d51c38cbffd71bc1b9fe
+        name: placeholder-1
+        ports:
+        - containerPort: 8080
+          name: http1
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 512Mi
+        startupProbe:
+          failureThreshold: 1
+          periodSeconds: 240
+          tcpSocket:
+            port: 8080
+          timeoutSeconds: 240
+      serviceAccountName: 256468121098-compute@developer.gserviceaccount.com
+      timeoutSeconds: 600
+  traffic:
+  - latestRevision: true
+    percent: 100
+status:
+  address:
+    url: https://rate-grid-oov3gnxyda-uc.a.run.app
+  conditions:
+  - lastTransitionTime: '2025-06-02T13:53:18.846361Z'
+    status: 'True'
+    type: Ready
+  - lastTransitionTime: '2025-06-02T13:53:18.230087Z'
+    status: 'True'
+    type: ConfigurationsReady
+  - lastTransitionTime: '2025-06-02T13:53:18.815083Z'
+    status: 'True'
+    type: RoutesReady
+  latestCreatedRevisionName: rate-grid-00014-n6l
+  latestReadyRevisionName: rate-grid-00014-n6l
+  observedGeneration: 15
+  traffic:
+  - latestRevision: true
+    percent: 100
+    revisionName: rate-grid-00014-n6l
+  url: https://rate-grid-oov3gnxyda-uc.a.run.app
