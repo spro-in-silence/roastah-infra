@@ -12,7 +12,7 @@ mkdir -p "$INFRA_REPO_DIR"/{cloudbuild,cloudrun,iam,secrets}
 
 # === CLOUD RUN EXPORT ===
 echo "Exporting Cloud Run services..."
-gcloud run services describe rate-grid-dev \
+gcloud run services describe rate-grid-d \
   --project="$DEV_PROJECT" \
   --region="$REGION" \
   --format yaml > "$INFRA_REPO_DIR/cloudrun/dev-service.yaml"
