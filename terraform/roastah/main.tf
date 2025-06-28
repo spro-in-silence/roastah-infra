@@ -39,50 +39,44 @@ resource "google_artifact_registry_repository" "roastah_repo" {
   description   = "Artifact Registry for Roastah"
   format        = "DOCKER"
   
-  labels = local.common_labels
 }
 
 resource "google_service_account" "run_sa" {
   account_id   = "roastah-sa"
   display_name = "Roastah Cloud Run Service Account"
   
-  labels = local.common_labels
 }
 
 resource "google_secret_manager_secret" "db_url" {
   secret_id = "DATABASE_URL"
   replication {
-    automatic = true
+    auto {}
   }
   
-  labels = local.common_labels
 }
 
 resource "google_secret_manager_secret" "openai_key" {
   secret_id = "OPENAI_API_KEY"
   replication {
-    automatic = true
+    auto {}
   }
   
-  labels = local.common_labels
 }
 
 resource "google_secret_manager_secret" "session_secret" {
   secret_id = "SESSION_SECRET"
   replication {
-    automatic = true
+    auto {}
   }
   
-  labels = local.common_labels
 }
 
 resource "google_secret_manager_secret" "gcp_service_account_key" {
   secret_id = "GCP_SERVICE_ACCOUNT_KEY"
   replication {
-    automatic = true
+    auto {}
   }
   
-  labels = local.common_labels
 }
 
 resource "google_project_iam_member" "run_admin" {
@@ -212,7 +206,6 @@ resource "google_cloud_run_service" "roastah" {
     latest_revision = true
   }
 
-  labels = local.common_labels
 }
 
 resource "google_cloud_run_service_iam_member" "public_access" {
@@ -244,13 +237,11 @@ resource "google_cloudbuild_trigger" "roastah_trigger" {
   
   service_account = google_service_account.run_sa.id
   
-  labels = local.common_labels
 }
 
 resource "google_pubsub_topic" "ci_notify" {
   name = "ci-notify"
   
-  labels = local.common_labels
 }
 
 resource "google_project_iam_member" "cloudbuild_run_admin" {

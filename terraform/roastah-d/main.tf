@@ -47,7 +47,6 @@ resource "google_artifact_registry_repository" "roastah_d_repo" {
 resource "google_service_account" "run_sa" {
   account_id   = "roastah-d-sa"
   display_name = "Roastah Dev Cloud Run Service Account"
-  
 }
 
 resource "google_secret_manager_secret" "db_url" {
@@ -239,7 +238,6 @@ resource "google_cloudbuild_trigger" "roastah_d_trigger" {
   }
   
   service_account = google_service_account.run_sa.id
-  
 }
 
 resource "google_pubsub_topic" "ci_notify" {
