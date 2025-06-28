@@ -1,0 +1,24 @@
+createTime: '2025-06-02T16:25:03.960901467Z'
+description: Build and deploy to Cloud Run service rate-grid on push to "^dev$"
+filename: cloudbuild.dev.yaml
+github:
+  name: rate-grid
+  owner: rategrid
+  push:
+    branch: ^dev$
+id: 773d8a77-4675-45b8-908f-cf37fd0a1462
+includeBuildLogs: INCLUDE_BUILD_LOGS_WITH_STATUS
+name: rate-grid-d
+resourceName: projects/rate-grid-d/locations/global/triggers/773d8a77-4675-45b8-908f-cf37fd0a1462
+serviceAccount: projects/rate-grid-d/serviceAccounts/530137774523-compute@developer.gserviceaccount.com
+substitutions:
+  _AR_HOSTNAME: us-central1-docker.pkg.dev
+  _AR_PROJECT_ID: rate-grid-d
+  _AR_REPOSITORY: cloud-run-source-deploy
+  _DEPLOY_REGIOIN: us-central1
+  _PLATFORM: managed
+  _SERVICE_NAME: rate-grid-d
+tags:
+- gcp-cloud-build-deploy-cloud-run
+- gcp-cloud-build-deploy-cloud-run-managed
+- rate-grid-d

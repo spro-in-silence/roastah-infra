@@ -1,0 +1,15 @@
+name: my-service
+location: us-central1
+image: gcr.io/my-project/my-service:latest
+env:
+  - name: ENV_VAR_1
+    value: value1
+  - name: ENV_VAR_2
+    value: value2
+resources:
+  limits:
+    cpu: "1"
+    memory: "512Mi"
+  requests:
+    cpu: "500m"
+    memory: "256Mi" 

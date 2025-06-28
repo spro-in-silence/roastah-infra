@@ -1,0 +1,8 @@
+bindings:
+  - role: roles/cloudbuild.builds.builder
+    members:
+      - serviceAccount:service-123456789@cloudbuild.gserviceaccount.com
+  - role: roles/run.admin
+    members:
+      - user:admin@example.com
+      - group:admins@example.com 
