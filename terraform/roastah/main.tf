@@ -224,7 +224,7 @@ resource "google_cloud_run_service_iam_member" "public_access" {
 
 resource "google_cloudbuild_trigger" "roastah_trigger" {
   name        = "roastah"
-  location    = "global"
+  location    = "us-east4"
   description = "Build and deploy roastah on push to main"
   
   github {
