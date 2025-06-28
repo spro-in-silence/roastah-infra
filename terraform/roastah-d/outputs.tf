@@ -1,5 +1,5 @@
-# Roastah Infrastructure - Outputs
-# This file contains output definitions for the roastah product
+# Roastah Dev Infrastructure - Outputs
+# This file contains output definitions for the roastah-d product
 
 # TODO: Add output definitions for roastah infrastructure 
 
@@ -17,6 +17,34 @@ output "database_url_secret_id" {
 
 output "openai_api_key_secret_id" {
   value = google_secret_manager_secret.openai_key.secret_id
+}
+
+output "session_secret_id" {
+  value = google_secret_manager_secret.session_secret.secret_id
+}
+
+output "gcp_service_account_key_secret_id" {
+  value = google_secret_manager_secret.gcp_service_account_key.secret_id
+}
+
+output "cloud_run_service_url" {
+  value = google_cloud_run_service.roastah_d.status[0].url
+}
+
+output "cloud_run_service_name" {
+  value = google_cloud_run_service.roastah_d.name
+}
+
+output "cloud_build_trigger_id" {
+  value = google_cloudbuild_trigger.roastah_d_trigger.id
+}
+
+output "cloud_build_trigger_name" {
+  value = google_cloudbuild_trigger.roastah_d_trigger.name
+}
+
+output "pubsub_topic_name" {
+  value = google_pubsub_topic.ci_notify.name
 }
 
 output "project_id" {

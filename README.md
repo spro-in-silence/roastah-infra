@@ -1,80 +1,205 @@
-# rate-grid-infra
-YAML Configurations for GCP
+# Roastah Infrastructure
 
-This project provides a Python-based solution to apply YAML configurations to various GCP services including IAM, Cloud Run, and Cloud Build.
+This repository contains the infrastructure configuration for the Roastah application using Terraform and Google Cloud Platform.
+
+## Overview
+
+This infrastructure setup provides:
+- **Terraform-first approach**: All infrastructure is managed declaratively through Terraform
+- **Environment parity**: Consistent configurations across development and production
+- **Security**: Proper IAM roles, service accounts, and secret management
+- **Scalability**: Cloud Run services with auto-scaling capabilities
+- **CI/CD**: Cloud Build triggers for automated deployments
+
+## Repository Structure
+
+```
+roastah-infra/
+├── terraform/
+│   ├── roastah/            # Production environment
+│   └── roastah-d/          # Development environment
+├── infra-config/
+│   ├── cloudbuild/         # Cloud Build configurations
+│   ├── cloudrun/           # Cloud Run service configurations
+│   ├── iam/               # IAM policy configurations
+│   ├── secrets/           # Secret Manager configurations
+│   └── triggers/          # Cloud Build trigger configurations
+├── apply_config.py        # Operational script for secret management
+├── deploy.sh              # Deployment orchestrator
+└── bootstrap-export.sh    # Bootstrap script for initial setup
+```
 
 ## Prerequisites
 
-1. Python 3.7 or higher
-2. Google Cloud SDK installed and configured
-3. Required Python packages (install using `pip install -r requirements.txt`)
+- Google Cloud SDK (`gcloud`)
+- Terraform (v1.0+)
+- Python 3.7+
+- Git
 
-## Setup
+## Quick Start
 
-1. Create a `.env` file in the project root with your GCP project ID:
-   ```
-   GCP_PROJECT_ID=your-project-id
-   ```
+### 1. Initial Setup
 
-2. Ensure you have the necessary GCP permissions to manage IAM, Cloud Run, and Cloud Build resources.
+```bash
+# Clone the repository
+git clone <repository-url>
+cd roastah-infra
 
-## Directory Structure
+# Set up GCP authentication
+gcloud auth application-default login
 
-- `iam/`: Contains IAM configuration YAML files
-- `cloudrun/`: Contains Cloud Run service configuration YAML files
-- `cloudbuild/`: Contains Cloud Build trigger configuration YAML files
+# Bootstrap the infrastructure (first time only)
+./bootstrap-export.sh
+```
 
-## Usage
+### 2. Deploy Infrastructure
 
-1. Place your YAML configuration files in the appropriate directories following the sample formats provided.
+```bash
+# Deploy all environments
+./deploy.sh
 
-2. Run the configuration applier:
+# Deploy specific environment
+./deploy.sh roastah
+./deploy.sh roastah-d
+```
+
+### 3. Update Secrets
+
+```bash
+# Update secret values using the operational script
+python3 apply_config.py update-secret DATABASE_URL "new-connection-string"
+python3 apply_config.py update-secret OPENAI_API_KEY "new-api-key"
+```
+
+## Infrastructure Components
+
+### Terraform Resources
+
+Each environment (`roastah` and `roastah-d`) includes:
+
+- **Artifact Registry**: Container image storage
+- **Service Accounts**: Application and deployment identities
+- **Secret Manager**: Secure secret storage
+- **IAM Roles**: Proper access controls
+- **Cloud Run Services**: Application deployment
+- **Cloud Build Triggers**: Automated CI/CD
+- **Backend State**: GCS bucket for Terraform state
+
+### Cloud Build Pipeline
+
+The CI/CD pipeline includes:
+
+1. **Build**: Containerize application
+2. **Test**: Run automated tests
+3. **Deploy**: Deploy to Cloud Run
+4. **Validate**: Health checks and monitoring
+
+### Security Features
+
+- **Least Privilege**: Service accounts with minimal required permissions
+- **Secret Management**: All secrets stored in Secret Manager
+- **Network Security**: Private networking where applicable
+- **Audit Logging**: Comprehensive logging and monitoring
+
+## Environment Management
+
+### Development Environment (`roastah-d`)
+
+- Project: `roastah-d`
+- Purpose: Development and testing
+- Features: Auto-scaling, development-specific configurations
+
+### Production Environment (`roastah`)
+
+- Project: `roastah`
+- Purpose: Production workloads
+- Features: High availability, production-grade configurations
+
+## Operational Scripts
+
+### `apply_config.py`
+
+Operational script for managing infrastructure configurations:
+
+```bash
+# Update secret values
+python3 apply_config.py update-secret <secret-name> <new-value>
+
+# Validate configurations
+python3 apply_config.py validate
+
+# List all secrets
+python3 apply_config.py list-secrets
+```
+
+### `deploy.sh`
+
+Deployment orchestrator that manages the complete deployment process:
+
+```bash
+# Deploy all environments
+./deploy.sh
+
+# Deploy specific environment
+./deploy.sh roastah
+./deploy.sh roastah-d
+```
+
+## Monitoring and Logging
+
+- **Cloud Logging**: Centralized logging for all services
+- **Cloud Monitoring**: Metrics and alerting
+- **Error Reporting**: Application error tracking
+- **Audit Logs**: Security and compliance logging
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Terraform State Lock**: If Terraform operations fail due to state locks
    ```bash
-   python apply_config.py
+   terraform force-unlock <lock-id>
    ```
 
-The script will:
-- Process all YAML files in the configuration directories
-- Apply IAM policies
-- Create/update Cloud Run services
-- Create Cloud Build triggers
+2. **Permission Errors**: Ensure proper IAM roles are assigned
+   ```bash
+   gcloud projects get-iam-policy <project-id>
+   ```
 
-## Configuration File Formats
+3. **Secret Access**: Verify service accounts can access secrets
+   ```bash
+   gcloud secrets list --project=<project-id>
+   ```
 
-### IAM Configuration
-```yaml
-bindings:
-  - role: roles/example.role
-    members:
-      - user:user@example.com
-      - serviceAccount:service@project.iam.gserviceaccount.com
+### Validation Commands
+
+```bash
+# Validate Terraform configurations
+cd terraform/roastah && terraform validate
+cd terraform/roastah-d && terraform validate
+
+# Validate Python scripts
+python3 -m py_compile apply_config.py
+
+# Validate shell scripts
+bash -n deploy.sh
 ```
 
-### Cloud Run Configuration
-```yaml
-name: service-name
-location: region
-image: gcr.io/project/image:tag
-env:
-  - name: ENV_VAR
-    value: value
-resources:
-  limits:
-    cpu: "1"
-    memory: "512Mi"
-```
+## Contributing
 
-### Cloud Build Configuration
-```yaml
-name: trigger-name
-description: "Trigger description"
-steps:
-  - name: builder-image
-    args:
-      - command
-      - arguments
-```
+1. Make changes to Terraform configurations
+2. Test deployment: `./deploy.sh`
+3. Update secrets if needed: `python3 apply_config.py update-secret <name> <value>`
+4. Commit and push changes using your preferred method
 
-## Error Handling
+## Migration Guide
 
-The script includes logging and error handling. Check the console output for any issues during configuration application.
+For detailed migration instructions from the previous infrastructure approach, see [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md).
+
+## Support
+
+For infrastructure issues or questions:
+1. Check the troubleshooting section
+2. Review Cloud Logging for error details
+3. Validate configurations using the provided scripts
+4. Consult the migration guide for recent changes
