@@ -28,7 +28,7 @@ output "gcp_service_account_key_secret_id" {
 }
 
 output "cloud_run_service_url" {
-  value = google_cloud_run_service.roastah_d.status[0].url
+  value = try(google_cloud_run_service.roastah_d.status[0].url, "Service not ready")
 }
 
 output "cloud_run_service_name" {

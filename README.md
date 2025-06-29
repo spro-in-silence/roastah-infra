@@ -1,205 +1,178 @@
 # Roastah Infrastructure
 
-This repository contains the infrastructure configuration for the Roastah application using Terraform and Google Cloud Platform.
+This repository contains the infrastructure as code (IaC) for the Roastah application using Terraform.
 
-## Overview
+## Architecture
 
-This infrastructure setup provides:
-- **Terraform-first approach**: All infrastructure is managed declaratively through Terraform
-- **Environment parity**: Consistent configurations across development and production
-- **Security**: Proper IAM roles, service accounts, and secret management
-- **Scalability**: Cloud Run services with auto-scaling capabilities
-- **CI/CD**: Cloud Build triggers for automated deployments
+The infrastructure is designed with a **clear separation of concerns**:
+- **Terraform** manages infrastructure configuration (Cloud Run service, IAM, secrets, etc.)
+- **Cloud Build** handles application deployments (building, pushing, deploying to Cloud Run)
+- **GitOps workflow** triggers complete deployments automatically
 
-## Repository Structure
+## Environments
 
-```
-roastah-infra/
-├── terraform/
-│   ├── roastah/            # Production environment
-│   └── roastah-d/          # Development environment
-├── infra-config/
-│   ├── cloudbuild/         # Cloud Build configurations
-│   ├── cloudrun/           # Cloud Run service configurations
-│   ├── iam/               # IAM policy configurations
-│   ├── secrets/           # Secret Manager configurations
-│   └── triggers/          # Cloud Build trigger configurations
-├── apply_config.py        # Operational script for secret management
-├── deploy.sh              # Deployment orchestrator
-└── bootstrap-export.sh    # Bootstrap script for initial setup
-```
+- **roastah-d** (Development): `roastah-d` project
+- **roastah** (Production): `roastah` project
 
-## Prerequisites
+## Workflow
 
-- Google Cloud SDK (`gcloud`)
-- Terraform (v1.0+)
-- Python 3.7+
-- Git
+### 1. Development Workflow
 
-## Quick Start
+1. **Make code changes** in your application repository
+2. **Push to `dev` branch** - this triggers Cloud Build
+3. **Cloud Build automatically**:
+   - Builds Docker image with correct architecture (linux/amd64)
+   - Pushes to Artifact Registry with `:latest` tag
+   - Deploys to Cloud Run with zero-downtime rollout
+   - Cleans up old revisions and images
+   - Sends deployment notifications
 
-### 1. Initial Setup
+### 2. Production Workflow
 
-```bash
-# Clone the repository
-git clone <repository-url>
-cd roastah-infra
-
-# Set up GCP authentication
-gcloud auth application-default login
-
-# Bootstrap the infrastructure (first time only)
-./bootstrap-export.sh
-```
-
-### 2. Deploy Infrastructure
-
-```bash
-# Deploy all environments
-./deploy.sh
-
-# Deploy specific environment
-./deploy.sh roastah
-./deploy.sh roastah-d
-```
-
-### 3. Update Secrets
-
-```bash
-# Update secret values using the operational script
-python3 apply_config.py update-secret DATABASE_URL "new-connection-string"
-python3 apply_config.py update-secret OPENAI_API_KEY "new-api-key"
-```
+1. **Merge to `main` branch** - this triggers Cloud Build
+2. **Cloud Build automatically**:
+   - Builds Docker image
+   - Pushes to Artifact Registry
+   - Deploys to Cloud Run with zero-downtime rollout
+   - Cleans up old revisions and images
+   - Sends deployment notifications
 
 ## Infrastructure Components
 
-### Terraform Resources
+### Managed by Terraform (Infrastructure Configuration)
 
-Each environment (`roastah` and `roastah-d`) includes:
+- **Artifact Registry**: Docker image storage with retention policies
+- **Cloud Run Service**: Infrastructure configuration (not deployments)
+- **Secret Manager**: Environment variables and secrets
+- **IAM**: Service accounts and permissions
+- **Cloud Build Triggers**: Automated deployment triggers
+- **Pub/Sub**: Build notifications
 
-- **Artifact Registry**: Container image storage
-- **Service Accounts**: Application and deployment identities
-- **Secret Manager**: Secure secret storage
-- **IAM Roles**: Proper access controls
-- **Cloud Run Services**: Application deployment
-- **Cloud Build Triggers**: Automated CI/CD
-- **Backend State**: GCS bucket for Terraform state
+### Managed by Cloud Build (Application Deployments)
 
-### Cloud Build Pipeline
+- **Docker image building** and pushing
+- **Cloud Run deployments** with zero-downtime rollouts
+- **Traffic management** (100% to latest revision)
+- **Revision cleanup** (keeps last 5 revisions)
+- **Image cleanup** (keeps last 2 images)
 
-The CI/CD pipeline includes:
+### Retention Policies
 
-1. **Build**: Containerize application
-2. **Test**: Run automated tests
-3. **Deploy**: Deploy to Cloud Run
-4. **Validate**: Health checks and monitoring
+- **Artifact Registry**: Keeps last 2 images, deletes older than 30 days
+- **Cloud Run**: Keeps last 5 revisions, Cloud Build manages cleanup
 
-### Security Features
+## Usage
 
-- **Least Privilege**: Service accounts with minimal required permissions
-- **Secret Management**: All secrets stored in Secret Manager
-- **Network Security**: Private networking where applicable
-- **Audit Logging**: Comprehensive logging and monitoring
+### Initial Setup
 
-## Environment Management
+1. **Set up GCP projects** (`roastah-d`, `roastah`)
+2. **Enable required APIs**:
+   ```bash
+   gcloud services enable cloudbuild.googleapis.com
+   gcloud services enable run.googleapis.com
+   gcloud services enable artifactregistry.googleapis.com
+   gcloud services enable secretmanager.googleapis.com
+   ```
 
-### Development Environment (`roastah-d`)
+3. **Deploy infrastructure**:
+   ```bash
+   # Development
+   cd terraform/roastah-d
+   terraform init
+   terraform apply -var="project_id=roastah-d"
+   
+   # Production
+   cd terraform/roastah
+   terraform init
+   terraform apply -var="project_id=roastah"
+   ```
 
-- Project: `roastah-d`
-- Purpose: Development and testing
-- Features: Auto-scaling, development-specific configurations
+### Daily Development
 
-### Production Environment (`roastah`)
+1. **Make code changes** in your app repository
+2. **Push to `dev` branch** - triggers automatic build and deployment
+3. **Monitor deployment** via Cloud Build logs or Pub/Sub notifications
 
-- Project: `roastah`
-- Purpose: Production workloads
-- Features: High availability, production-grade configurations
+### Production Deployment
 
-## Operational Scripts
+1. **Merge to `main` branch** - triggers automatic build and deployment
+2. **Monitor deployment** via Cloud Build logs or Pub/Sub notifications
 
-### `apply_config.py`
+## Cloud Build Configuration
 
-Operational script for managing infrastructure configurations:
+Cloud Build is configured to:
+- Build images for `linux/amd64` architecture (Cloud Run compatible)
+- Use Artifact Registry (not legacy Container Registry)
+- Tag images with both commit SHA and `:latest`
+- Deploy to Cloud Run with zero-downtime rollout
+- Clean up old revisions and images automatically
+- Send notifications via Pub/Sub
 
-```bash
-# Update secret values
-python3 apply_config.py update-secret <secret-name> <new-value>
+## Deployment Process
 
-# Validate configurations
-python3 apply_config.py validate
+Each Cloud Build deployment includes:
 
-# List all secrets
-python3 apply_config.py list-secrets
-```
-
-### `deploy.sh`
-
-Deployment orchestrator that manages the complete deployment process:
-
-```bash
-# Deploy all environments
-./deploy.sh
-
-# Deploy specific environment
-./deploy.sh roastah
-./deploy.sh roastah-d
-```
-
-## Monitoring and Logging
-
-- **Cloud Logging**: Centralized logging for all services
-- **Cloud Monitoring**: Metrics and alerting
-- **Error Reporting**: Application error tracking
-- **Audit Logs**: Security and compliance logging
+1. **Image Building**: Docker build with proper architecture
+2. **Image Pushing**: Push to Artifact Registry with SHA and latest tags
+3. **Service Deployment**: Deploy to Cloud Run with `--no-traffic` flag
+4. **Health Check**: Wait for new revision to be ready
+5. **Traffic Switch**: Switch 100% traffic to new revision
+6. **Cleanup**: Remove old revisions and images
+7. **Notification**: Send deployment status via Pub/Sub
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Terraform State Lock**: If Terraform operations fail due to state locks
-   ```bash
-   terraform force-unlock <lock-id>
-   ```
+1. **Container startup failures**:
+   - Check if image was built for correct architecture (`linux/amd64`)
+   - Verify container listens on port 8080
+   - Check Cloud Run logs for startup errors
 
-2. **Permission Errors**: Ensure proper IAM roles are assigned
-   ```bash
-   gcloud projects get-iam-policy <project-id>
-   ```
+2. **Deployment failures**:
+   - Check Cloud Build logs for deployment errors
+   - Verify IAM permissions for Cloud Build service account
+   - Check if Cloud Run service exists and is accessible
 
-3. **Secret Access**: Verify service accounts can access secrets
-   ```bash
-   gcloud secrets list --project=<project-id>
-   ```
+3. **Permission errors**:
+   - Check IAM roles are properly assigned
+   - Verify service account permissions
 
-### Validation Commands
+### Useful Commands
 
 ```bash
-# Validate Terraform configurations
-cd terraform/roastah && terraform validate
-cd terraform/roastah-d && terraform validate
+# Check Cloud Run logs
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=roastah-d" --limit=20
 
-# Validate Python scripts
-python3 -m py_compile apply_config.py
+# List Artifact Registry images
+gcloud artifacts docker images list us-central1-docker.pkg.dev/roastah-d/roastah-d
 
-# Validate shell scripts
-bash -n deploy.sh
+# Check Cloud Build status
+gcloud builds list --limit=5
+
+# Check Cloud Run revisions
+gcloud run revisions list --service=roastah-d --region=us-central1
 ```
 
-## Contributing
+## Security
 
-1. Make changes to Terraform configurations
-2. Test deployment: `./deploy.sh`
-3. Update secrets if needed: `python3 apply_config.py update-secret <name> <value>`
-4. Commit and push changes using your preferred method
+- All secrets are managed via Secret Manager
+- Service accounts have minimal required permissions
+- Cloud Run services are publicly accessible (can be restricted if needed)
+- Artifact Registry has retention policies to prevent storage bloat
 
-## Migration Guide
+## Cost Optimization
 
-For detailed migration instructions from the previous infrastructure approach, see [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md).
+- Cloud Run scales to zero when not in use
+- Artifact Registry retention policies limit storage costs
+- Minimal IAM permissions reduce security overhead
+- Automatic cleanup of old revisions and images
 
-## Support
+## Benefits of This Approach
 
-For infrastructure issues or questions:
-1. Check the troubleshooting section
-2. Review Cloud Logging for error details
-3. Validate configurations using the provided scripts
-4. Consult the migration guide for recent changes
+1. **Clear Separation**: Infrastructure (Terraform) vs Deployments (Cloud Build)
+2. **Zero-Downtime**: Cloud Build handles safe rollouts
+3. **Automated**: No manual deployment steps required
+4. **Consistent**: Same deployment process for all environments
+5. **Observable**: Built-in notifications and logging
+6. **Maintainable**: Infrastructure changes don't affect deployments

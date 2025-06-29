@@ -34,11 +34,29 @@ locals {
 }
 
 resource "google_artifact_registry_repository" "roastah_repo" {
-  location      = var.region
-  repository_id = "roastah"
-  description   = "Artifact Registry for Roastah"
+  location      = "us-central1"
+  repository_id = var.project_id
+  description   = "Docker repository for ${var.project_id}"
   format        = "DOCKER"
-  
+  project       = var.project_id
+
+  cleanup_policy_dry_run = false
+
+  cleanup_policies {
+    id     = "keep-minimum-2"
+    action = "KEEP"
+    most_recent_versions {
+      keep_count = 2
+    }
+  }
+
+  cleanup_policies {
+    id     = "delete-older-than-30-days"
+    action = "DELETE"
+    condition {
+      older_than = "2592000s"  # 30 days in seconds
+    }
+  }
 }
 
 resource "google_service_account" "run_sa" {
@@ -144,7 +162,7 @@ resource "google_cloud_run_service" "roastah" {
       timeout_seconds = 600
       
       containers {
-        image = "us-central1-docker.pkg.dev/${var.project_id}/roastah/roastah:latest"
+        image = "us-central1-docker.pkg.dev/${var.project_id}/${var.project_id}/${var.project_id}:latest"
         ports {
           container_port = 8080
         }
@@ -217,7 +235,7 @@ resource "google_cloud_run_service_iam_member" "public_access" {
 
 resource "google_cloudbuild_trigger" "roastah_trigger" {
   name        = "roastah"
-  location    = "us-east4"
+  location    = "us-central1"
   description = "Build and deploy roastah on push to main"
   
   github {
@@ -244,12 +262,7 @@ resource "google_pubsub_topic" "ci_notify" {
   
 }
 
-resource "google_project_iam_member" "cloudbuild_run_admin" {
-  project = var.project_id
-  role    = "roles/run.admin"
-  member  = "serviceAccount:${data.google_project.current.number}@cloudbuild.gserviceaccount.com"
-}
-
+# Cloud Build IAM permissions (minimal - only for building/pushing images)
 resource "google_project_iam_member" "cloudbuild_storage_admin" {
   project = var.project_id
   role    = "roles/storage.admin"
@@ -259,17 +272,5 @@ resource "google_project_iam_member" "cloudbuild_storage_admin" {
 resource "google_project_iam_member" "cloudbuild_pubsub_publisher" {
   project = var.project_id
   role    = "roles/pubsub.publisher"
-  member  = "serviceAccount:${data.google_project.current.number}@cloudbuild.gserviceaccount.com"
-}
-
-resource "google_project_iam_member" "cloudbuild_service_account_user" {
-  project = var.project_id
-  role    = "roles/iam.serviceAccountUser"
-  member  = "serviceAccount:${data.google_project.current.number}@cloudbuild.gserviceaccount.com"
-}
-
-resource "google_project_iam_member" "cloudbuild_secret_accessor" {
-  project = var.project_id
-  role    = "roles/secretmanager.secretAccessor"
   member  = "serviceAccount:${data.google_project.current.number}@cloudbuild.gserviceaccount.com"
 } 

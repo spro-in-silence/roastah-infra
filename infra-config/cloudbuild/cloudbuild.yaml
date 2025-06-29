@@ -1,7 +1,7 @@
 # Cloud Build configuration for production deployment
 steps:
   # 1. Authenticate to Artifact Registry
-  - name: 'gcr.io/cloud-builders/docker'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: Authenticate
     entrypoint: bash
     args:
@@ -151,9 +151,6 @@ options:
 #   - roles/storage.admin on roastah project
 #   - roles/pubsub.publisher on ci-notify topic
 #   - roles/iam.serviceAccountUser on roastah project
-#   - roles/secretmanager.secretAccessor on roastah project
-#
-# - Service Account (roastah-sa) needs:
 #   - roles/secretmanager.secretAccessor on roastah project
 #
 # All IAM permissions are now managed by Terraform

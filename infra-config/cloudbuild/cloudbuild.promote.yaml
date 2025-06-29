@@ -1,52 +1,64 @@
-# Cloud Build configuration for promoting images from dev to prod
+# Cloud Build configuration for production deployment
 steps:
-  # Pull the source image from dev project
+  # 1. Authenticate to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
-    entrypoint: 'bash'
+    id: Authenticate
+    entrypoint: bash
     args:
       - '-c'
       - |
-        docker pull gcr.io/rate-grid-d/rate-grid-dev:$COMMIT_SHA
-        docker tag gcr.io/rate-grid-d/rate-grid-dev:$COMMIT_SHA gcr.io/$PROJECT_ID/rate-grid:$COMMIT_SHA
+        gcloud auth configure-docker us-central1-docker.pkg.dev
 
-  # Push the promoted image to prod project
+  # 2. Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/rate-grid:$COMMIT_SHA']
-
-  # Deploy to Cloud Run in prod project
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
+    id: Build Image
+    entrypoint: bash
     args:
-      - 'run'
-      - 'deploy'
-      - '${_SERVICE_NAME}'
-      - '--image'
-      - 'gcr.io/$PROJECT_ID/rate-grid:$COMMIT_SHA'
-      - '--region'
-      - '${_REGION}'
-      - '--platform'
-      - 'managed'
-      - '--allow-unauthenticated'
-      - '--port'
-      - '8080'
-      - '--set-env-vars'
-      - 'NODE_ENV=production,APP_ENV=production,GCP_PROJECT_ID=rate-grid'
+      - '-c'
+      - |
+        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/roastah/roastah:$SHORT_SHA .
+        docker push us-central1-docker.pkg.dev/$PROJECT_ID/roastah/roastah:$SHORT_SHA
 
-  # Send build notification
+  # 3. Tag as latest
+  - name: 'gcr.io/cloud-builders/docker'
+    id: Tag Latest
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        docker tag us-central1-docker.pkg.dev/$PROJECT_ID/roastah/roastah:$SHORT_SHA us-central1-docker.pkg.dev/$PROJECT_ID/roastah/roastah:latest
+        docker push us-central1-docker.pkg.dev/$PROJECT_ID/roastah/roastah:latest
+
+  # 4. Keep only last 2 Artifact Registry images
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: 'bash'
+    id: Prune Old Images
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        images=$(gcloud artifacts docker images list us-central1-docker.pkg.dev/$PROJECT_ID/roastah --format="value(package)" | sort -r)
+        to_delete=$(echo "$images" | tail -n +3)
+        for img in $to_delete; do
+          gcloud artifacts docker images delete "$img" --quiet --delete-tags
+        done
+
+  # 5. Send build notification
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: Send Notification
+    entrypoint: bash
     args:
       - '-c'
       - |
         gcloud pubsub topics publish ci-notify \
-          --message="Image promotion completed for commit $COMMIT_SHA" \
+          --message="Production image built for commit $COMMIT_SHA" \
           --attribute="status=success,environment=production,commit=$COMMIT_SHA"
 
 images:
-  - 'gcr.io/$PROJECT_ID/rate-grid:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/roastah/roastah:$SHORT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/roastah/roastah:latest'
 
 substitutions:
-  _SERVICE_NAME: 'rate-grid'
+  _SERVICE_NAME: 'roastah'
   _REGION: 'us-central1'
 
 timeout: '1800s'
@@ -54,13 +66,10 @@ timeout: '1800s'
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: 'E2_HIGHCPU_8'
-  substitution_option: 'ALLOW_LOOSE'
 
-# IAM Requirements:
+# IAM Requirements (managed by Terraform):
 # - Cloud Build Service Account needs:
-#   - roles/run.admin on rate-grid project
-#   - roles/storage.admin on rate-grid project
+#   - roles/storage.admin on roastah project
 #   - roles/pubsub.publisher on ci-notify topic
-# - Manual approval required via IAM condition:
-#   - resource.type == "cloudbuild.googleapis.com/Build"
-#   - resource.name.startsWith("projects/rate-grid/triggers/production-deploy") 
+#
+# All IAM permissions are now managed by Terraform 

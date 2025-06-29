@@ -1,20 +1,12 @@
-# Roastah Infrastructure - Main Configuration
-# This file contains the main Terraform resources for the roastah product
-
-# TODO: Add resource blocks for roastah infrastructure 
-
 terraform {
   required_version = ">= 1.0"
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 4.0"
+      version = "~> 5.0"
     }
   }
 }
-
-# Roastah Dev Infrastructure - Main Configuration
-# This file contains the main Terraform resources for the roastah-d product
 
 provider "google" {
   project = var.project_id
@@ -26,70 +18,17 @@ data "google_project" "current" {
   project_id = var.project_id
 }
 
-# Common labels for all resources
-locals {
-  common_labels = {
-    environment = "development"
-    project     = "roastah-d"
-    managed_by  = "terraform"
-    team        = "infrastructure"
-  }
-}
-
-resource "google_artifact_registry_repository" "roastah_d_repo" {
-  location      = var.region
-  repository_id = "roastah-d"
-  description   = "Artifact Registry for Roastah Dev"
-  format        = "DOCKER"
-  
-}
-
+# Service Account for Cloud Run
 resource "google_service_account" "run_sa" {
-  account_id   = "roastah-d-sa"
-  display_name = "Roastah Dev Cloud Run Service Account"
+  account_id   = "${var.project_id}-sa"
+  display_name = "Service Account for ${var.project_id} Cloud Run"
+  project      = var.project_id
 }
 
-resource "google_secret_manager_secret" "db_url" {
-  secret_id = "DATABASE_URL"
-  replication {
-    auto {}
-  }
-  
-}
-
-resource "google_secret_manager_secret" "openai_key" {
-  secret_id = "OPENAI_API_KEY"
-  replication {
-    auto {}
-  }
-  
-}
-
-resource "google_secret_manager_secret" "session_secret" {
-  secret_id = "SESSION_SECRET"
-  replication {
-    auto {}
-  }
-  
-}
-
-resource "google_secret_manager_secret" "gcp_service_account_key" {
-  secret_id = "GCP_SERVICE_ACCOUNT_KEY"
-  replication {
-    auto {}
-  }
-  
-}
-
+# IAM roles for the service account
 resource "google_project_iam_member" "run_admin" {
   project = var.project_id
   role    = "roles/run.admin"
-  member  = "serviceAccount:${google_service_account.run_sa.email}"
-}
-
-resource "google_project_iam_member" "storage_admin" {
-  project = var.project_id
-  role    = "roles/storage.admin"
   member  = "serviceAccount:${google_service_account.run_sa.email}"
 }
 
@@ -105,33 +44,116 @@ resource "google_project_iam_member" "service_account_user" {
   member  = "serviceAccount:${google_service_account.run_sa.email}"
 }
 
+resource "google_project_iam_member" "storage_admin" {
+  project = var.project_id
+  role    = "roles/storage.admin"
+  member  = "serviceAccount:${google_service_account.run_sa.email}"
+}
+
+# Artifact Registry Repository
+resource "google_artifact_registry_repository" "roastah_d_repo" {
+  location      = "us-central1"
+  repository_id = var.project_id
+  description   = "Docker repository for ${var.project_id}"
+  format        = "DOCKER"
+  project       = var.project_id
+
+  cleanup_policy_dry_run = false
+
+  cleanup_policies {
+    id     = "keep-minimum-2"
+    action = "KEEP"
+    most_recent_versions {
+      keep_count = 2
+    }
+  }
+
+  cleanup_policies {
+    id     = "delete-older-than-30-days"
+    action = "DELETE"
+    condition {
+      older_than = "2592000s"  # 30 days in seconds
+    }
+  }
+}
+
+# Secret Manager Secrets
+resource "google_secret_manager_secret" "db_url" {
+  secret_id = "DATABASE_URL"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret" "openai_key" {
+  secret_id = "OPENAI_API_KEY"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret" "session_secret" {
+  secret_id = "SESSION_SECRET"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret" "gcp_service_account_key" {
+  secret_id = "GCP_SERVICE_ACCOUNT_KEY"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+}
+
+# IAM access for secrets
 resource "google_secret_manager_secret_iam_member" "db_url_accessor" {
-  secret_id = google_secret_manager_secret.db_url.id
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.db_url.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.run_sa.email}"
 }
 
 resource "google_secret_manager_secret_iam_member" "openai_key_accessor" {
-  secret_id = google_secret_manager_secret.openai_key.id
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.openai_key.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.run_sa.email}"
 }
 
 resource "google_secret_manager_secret_iam_member" "session_secret_accessor" {
-  secret_id = google_secret_manager_secret.session_secret.id
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.session_secret.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.run_sa.email}"
 }
 
 resource "google_secret_manager_secret_iam_member" "gcp_service_account_key_accessor" {
-  secret_id = google_secret_manager_secret.gcp_service_account_key.id
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.gcp_service_account_key.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.run_sa.email}"
 }
 
+# Pub/Sub Topic for CI notifications
+resource "google_pubsub_topic" "ci_notify" {
+  name    = "ci-notify"
+  project = var.project_id
+}
+
+# Cloud Run Service (Infrastructure only - deployments handled by Cloud Build)
 resource "google_cloud_run_service" "roastah_d" {
-  name     = "roastah-d"
-  location = var.region
+  name     = var.project_id
+  location = "us-central1"
+  project  = var.project_id
 
   template {
     metadata {
@@ -146,7 +168,8 @@ resource "google_cloud_run_service" "roastah_d" {
       timeout_seconds = 600
       
       containers {
-        image = "us-central1-docker.pkg.dev/${var.project_id}/roastah-d/roastah-d:latest"
+        # Placeholder image - Cloud Build will deploy the actual application image
+        image = "gcr.io/cloudrun/hello"
         ports {
           container_port = 8080
         }
@@ -165,19 +188,19 @@ resource "google_cloud_run_service" "roastah_d" {
         }
         env {
           name = "DATABASE_URL"
-          value = "sm://${google_secret_manager_secret.db_url.secret_id}"
+          value = "projects/${var.project_id}/secrets/DATABASE_URL/versions/latest"
         }
         env {
           name = "OPENAI_API_KEY"
-          value = "sm://${google_secret_manager_secret.openai_key.secret_id}"
+          value = "projects/${var.project_id}/secrets/OPENAI_API_KEY/versions/latest"
         }
         env {
           name = "SESSION_SECRET"
-          value = "sm://${google_secret_manager_secret.session_secret.secret_id}"
+          value = "projects/${var.project_id}/secrets/SESSION_SECRET/versions/latest"
         }
         env {
           name = "GCP_SERVICE_ACCOUNT_KEY"
-          value = "sm://${google_secret_manager_secret.gcp_service_account_key.secret_id}"
+          value = "projects/${var.project_id}/secrets/GCP_SERVICE_ACCOUNT_KEY/versions/latest"
         }
         env {
           name  = "SSL_ENABLED"
@@ -203,48 +226,23 @@ resource "google_cloud_run_service" "roastah_d" {
     }
   }
 
+  # Traffic configuration - Cloud Build will manage this during deployments
   traffic {
     percent         = 100
     latest_revision = true
   }
-
 }
 
+# Public access to Cloud Run service
 resource "google_cloud_run_service_iam_member" "public_access" {
-  location = google_cloud_run_service.roastah_d.location
+  location = "us-central1"
+  project  = var.project_id
   service  = google_cloud_run_service.roastah_d.name
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
 
-resource "google_cloudbuild_trigger" "roastah_d_trigger" {
-  name        = "roastah-d"
-  location    = "us-east4"
-  description = "Build and deploy roastah-d on push to dev"
-  
-  github {
-    owner = "roastah"
-    name  = "roastah"
-    push {
-      branch = "^dev$"
-    }
-  }
-  
-  filename = "cloudbuild.dev.yaml"
-  
-  substitutions = {
-    _SERVICE_NAME = "roastah-d"
-    _REGION       = var.region
-  }
-  
-  service_account = google_service_account.run_sa.id
-}
-
-resource "google_pubsub_topic" "ci_notify" {
-  name = "ci-notify"
-  
-}
-
+# Cloud Build IAM permissions (for building, pushing, and deploying)
 resource "google_project_iam_member" "cloudbuild_run_admin" {
   project = var.project_id
   role    = "roles/run.admin"
@@ -273,4 +271,28 @@ resource "google_project_iam_member" "cloudbuild_secret_accessor" {
   project = var.project_id
   role    = "roles/secretmanager.secretAccessor"
   member  = "serviceAccount:${data.google_project.current.number}@cloudbuild.gserviceaccount.com"
+}
+
+# Cloud Build Trigger
+resource "google_cloudbuild_trigger" "roastah_d_trigger" {
+  name        = "roastah-d"
+  description = "Build and deploy roastah-d on push to dev"
+  location    = "us-central1"
+  project     = var.project_id
+
+  github {
+    owner = "spro-in-silence"
+    name  = "roastah"
+    push {
+      branch = "^dev$"
+    }
+  }
+
+  filename        = "cloudbuild.dev.yaml"
+  service_account = google_service_account.run_sa.id
+
+  substitutions = {
+    _SERVICE_NAME = "roastah-d"
+    _REGION       = "us-central1"
+  }
 } 

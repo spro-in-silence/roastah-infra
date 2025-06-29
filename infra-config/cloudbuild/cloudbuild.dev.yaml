@@ -1,7 +1,7 @@
 # Cloud Build configuration for development deployment
 steps:
   # 1. Authenticate to Artifact Registry
-  - name: 'gcr.io/cloud-builders/docker'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: Authenticate
     entrypoint: bash
     args:
@@ -41,6 +41,7 @@ steps:
           --image=us-central1-docker.pkg.dev/$PROJECT_ID/roastah-d/roastah-d:$SHORT_SHA \
           --region=${_REGION} \
           --platform=managed \
+          --allow-unauthenticated \
           --port=8080 \
           --set-env-vars=NODE_ENV=development,APP_ENV=development,GCP_PROJECT_ID=roastah-d,DATABASE_URL=sm://DATABASE_URL,OPENAI_API_KEY=sm://OPENAI_API_KEY,SESSION_SECRET=sm://SESSION_SECRET,GCP_SERVICE_ACCOUNT_KEY=sm://GCP_SERVICE_ACCOUNT_KEY,SSL_ENABLED=true \
           --ingress=all \
@@ -79,7 +80,7 @@ steps:
             sleep 10
           done
 
-          # FINAL SAFE CHECK - ADDED
+          # FINAL SAFE CHECK
           revision_status=$(gcloud run revisions describe $latest_rev --region=${_REGION} --format="value(status.conditions[?(@.type=='Ready')].status)")
           if [ "$revision_status" != "True" ]; then
             echo "ERROR: Latest revision $latest_rev is not ready. Aborting traffic update."
@@ -150,9 +151,6 @@ options:
 #   - roles/storage.admin on roastah-d project
 #   - roles/pubsub.publisher on ci-notify topic
 #   - roles/iam.serviceAccountUser on roastah-d project
-#   - roles/secretmanager.secretAccessor on roastah-d project
-#
-# - Service Account (roastah-d-sa) needs:
 #   - roles/secretmanager.secretAccessor on roastah-d project
 #
 # All IAM permissions are now managed by Terraform
