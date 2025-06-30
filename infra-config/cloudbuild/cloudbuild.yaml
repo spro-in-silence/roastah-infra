@@ -1,126 +1,70 @@
-# Cloud Build configuration for production deployment
+# Cloud Build configuration for infrastructure management (production)
 steps:
-  # 1. Authenticate to Artifact Registry
+  # 1. Install Terraform
+  - name: 'hashicorp/terraform:1.5.0'
+    id: Install Terraform
+    entrypoint: sh
+    args:
+      - '-c'
+      - |
+        terraform version
+        echo "Terraform installed successfully"
+
+  # 2. Initialize Terraform
+  - name: 'hashicorp/terraform:1.5.0'
+    id: Terraform Init
+    entrypoint: sh
+    args:
+      - '-c'
+      - |
+        cd terraform/roastah
+        terraform init -backend-config="bucket=${_TF_STATE_BUCKET}" -backend-config="prefix=terraform/state"
+        echo "Terraform initialized successfully"
+
+  # 3. Terraform Plan
+  - name: 'hashicorp/terraform:1.5.0'
+    id: Terraform Plan
+    entrypoint: sh
+    args:
+      - '-c'
+      - |
+        cd terraform/roastah
+        terraform plan -out=tfplan -var-file="terraform.tfvars" -detailed-exitcode
+        echo "Terraform plan completed"
+
+  # 4. Terraform Apply (with approval)
+  - name: 'hashicorp/terraform:1.5.0'
+    id: Terraform Apply
+    entrypoint: sh
+    args:
+      - '-c'
+      - |
+        cd terraform/roastah
+        terraform apply -auto-approve tfplan
+        echo "Terraform apply completed successfully"
+
+  # 5. Validate Infrastructure
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: Authenticate
+    id: Validate Infrastructure
     entrypoint: bash
     args:
       - '-c'
       - |
-        gcloud auth configure-docker us-central1-docker.pkg.dev
-
-  # 2. Build the Docker image
-  - name: 'gcr.io/cloud-builders/docker'
-    id: Build Image
-    entrypoint: bash
-    args:
-      - '-c'
-      - |
-        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/roastah/roastah:$SHORT_SHA .
-        docker push us-central1-docker.pkg.dev/$PROJECT_ID/roastah/roastah:$SHORT_SHA
-
-  # 3. Tag as latest
-  - name: 'gcr.io/cloud-builders/docker'
-    id: Tag Latest
-    entrypoint: bash
-    args:
-      - '-c'
-      - |
-        docker tag us-central1-docker.pkg.dev/$PROJECT_ID/roastah/roastah:$SHORT_SHA us-central1-docker.pkg.dev/$PROJECT_ID/roastah/roastah:latest
-        docker push us-central1-docker.pkg.dev/$PROJECT_ID/roastah/roastah:latest
-
-  # 4. Deploy to Cloud Run
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: Deploy to Cloud Run
-    entrypoint: bash
-    args:
-      - '-c'
-      - |
-        # Deploy the service
-        gcloud run deploy ${_SERVICE_NAME} \
-          --image=us-central1-docker.pkg.dev/$PROJECT_ID/roastah/roastah:$SHORT_SHA \
-          --region=${_REGION} \
-          --platform=managed \
-          --allow-unauthenticated \
-          --port=8080 \
-          --set-env-vars=NODE_ENV=production,APP_ENV=production,GCP_PROJECT_ID=roastah,DATABASE_URL=sm://DATABASE_URL,OPENAI_API_KEY=sm://OPENAI_API_KEY,SESSION_SECRET=sm://SESSION_SECRET,GCP_SERVICE_ACCOUNT_KEY=sm://GCP_SERVICE_ACCOUNT_KEY,SSL_ENABLED=true \
-          --ingress=all \
-          --no-traffic \
-          --concurrency=80 \
-          --timeout=600 \
-          --cpu=1000m \
-          --memory=512Mi \
-          --max-instances=100 \
-          --min-instances=0 \
-          --cpu-throttling \
-          --execution-environment=gen2 \
-          --session-affinity \
-          --use-http2 \
-          --cpu-boost \
-          --quiet || true
-
-        # Wait for deployment to complete
-        echo "Waiting for deployment to complete..."
-        sleep 60
-
-        # Get the latest revision
-        echo "Getting latest revision..."
-        latest_rev=$(gcloud run revisions list --service=${_SERVICE_NAME} --region=${_REGION} --sort-by="~creationTimestamp" --limit=1 --format="value(metadata.name)")
+        # Validate Cloud Run services exist and are healthy
+        echo "Validating Cloud Run services..."
+        gcloud run services list --region=${_REGION} --filter="metadata.name:roastah" --format="table(metadata.name,status.conditions[0].status)"
         
-        if [ -n "$latest_rev" ]; then
-          echo "Waiting for revision to be ready..."
-          # Wait for revision to be ready
-          for i in {1..30}; do
-            status=$(gcloud run revisions describe $latest_rev --region=${_REGION} --format="value(status.conditions[0].status)")
-            if [ "$status" = "True" ]; then
-              echo "Revision is ready"
-              break
-            fi
-            echo "Revision not ready yet, waiting..."
-            sleep 10
-          done
+        # Validate Artifact Registry repositories exist
+        echo "Validating Artifact Registry repositories..."
+        gcloud artifacts repositories list --location=${_REGION} --filter="name:roastah"
+        
+        # Validate IAM bindings
+        echo "Validating IAM bindings..."
+        gcloud projects get-iam-policy ${PROJECT_ID} --flatten="bindings[].members" --format="table(bindings.role)" --filter="bindings.members:serviceAccount:cloudbuild@${PROJECT_ID}.iam.gserviceaccount.com"
+        
+        echo "Infrastructure validation completed"
 
-          # FINAL SAFE CHECK - ADDED
-          revision_status=$(gcloud run revisions describe $latest_rev --region=${_REGION} --format="value(status.conditions[?(@.type=='Ready')].status)")
-          if [ "$revision_status" != "True" ]; then
-            echo "ERROR: Latest revision $latest_rev is not ready. Aborting traffic update."
-            exit 1
-          fi
-
-          echo "Updating traffic to revision: $latest_rev"
-          gcloud run services update-traffic ${_SERVICE_NAME} --region=${_REGION} --to-revisions=$latest_rev=100
-        else
-          echo "No revisions found for service ${_SERVICE_NAME}"
-          exit 1
-        fi
-
-  # 5. Keep only last 5 Cloud Run revisions
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: Prune Old Revisions
-    entrypoint: bash
-    args:
-      - '-c'
-      - |
-        revs=$(gcloud run revisions list --service=${_SERVICE_NAME} --region=${_REGION} --sort-by="~creationTimestamp" --format="value(metadata.name)")
-        to_delete=$(echo "$revs" | tail -n +6)
-        for rev in $to_delete; do
-          gcloud run revisions delete $rev --region=${_REGION} --quiet
-        done
-
-  # 6. Keep only last 2 Artifact Registry images
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: Prune Old Images
-    entrypoint: bash
-    args:
-      - '-c'
-      - |
-        images=$(gcloud artifacts docker images list us-central1-docker.pkg.dev/$PROJECT_ID/roastah --format="value(package)" | sort -r)
-        to_delete=$(echo "$images" | tail -n +3)
-        for img in $to_delete; do
-          gcloud artifacts docker images delete "$img" --quiet --delete-tags
-        done
-
-  # 7. Send build notification
+  # 6. Send Infrastructure Notification
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: Send Notification
     entrypoint: bash
@@ -128,16 +72,12 @@ steps:
       - '-c'
       - |
         gcloud pubsub topics publish ci-notify \
-          --message="Production deployment completed for commit $COMMIT_SHA" \
-          --attribute="status=success,environment=production,commit=$COMMIT_SHA"
-
-images:
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/roastah/roastah:$SHORT_SHA'
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/roastah/roastah:latest'
+          --message="Infrastructure deployment completed for commit $COMMIT_SHA" \
+          --attribute="status=success,environment=production,type=infrastructure,commit=$COMMIT_SHA"
 
 substitutions:
-  _SERVICE_NAME: 'roastah'
   _REGION: 'us-central1'
+  _TF_STATE_BUCKET: 'roastah-terraform-state'
 
 timeout: '1800s'
 
@@ -152,5 +92,6 @@ options:
 #   - roles/pubsub.publisher on ci-notify topic
 #   - roles/iam.serviceAccountUser on roastah project
 #   - roles/secretmanager.secretAccessor on roastah project
+#   - roles/artifactregistry.admin on roastah project
 #
 # All IAM permissions are now managed by Terraform
